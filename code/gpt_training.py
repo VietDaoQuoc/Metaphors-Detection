@@ -8,16 +8,16 @@ Original file is located at
 """
 
 # prep for mount
-from google.colab import drive
-drive.mount('/content/drive')
+#from google.colab import drive
+#drive.mount('/content/drive')
 
 #!python -m pip install wandb -Uq
 #!python -m pip install ray[tune]
 ##!python -m pip install sigopt
 #!python -m pip install optuna
-!python -m pip install nltk python-Levenshtein
+#!python -m pip install nltk python-Levenshtein
 #!python -m pip install rouge-score
-!python -m pip install peft
+#!python -m pip install peft
 
 import torch
 import torch.nn as nn
@@ -52,7 +52,7 @@ from peft import get_peft_model, IA3Config, TaskType
 #wandb.login() #enter this token: a5d8e3b6d2ef7d55f930ab72670aaa64e1a4198d
 #wandb.init(project="huggingface", entity="teamproject464-universit-t-des-saarlandes-saarland-unive")
 
-!ls '/content/drive/MyDrive'
+#!ls '/content/drive/MyDrive'
 
 # Preprocessing english data
 
@@ -89,7 +89,6 @@ df_met = df_met.drop(columns=['Verb'])
 df_met = df_met.dropna(subset=['Input', 'Output'])
 
 # size 350
-# Now Viet's
 eng_all_viet = pd.read_csv('/content/drive/MyDrive/eng_all_viet.csv',delimiter=';', encoding='UTF-8' )
 eng_all_viet = eng_all_viet.rename(columns={'Tuple SVO': 'Output'})
 eng_all_viet = eng_all_viet.rename(columns={'Sentence': 'Input'})
@@ -119,7 +118,7 @@ eng_df_all = pd.concat([eng_all_viet, df_met, df_literal], ignore_index=True)
 
 
 eng_df_all = eng_df_all.dropna()
-
+# TODO: clean data again results are not good
 # Put a placeholder for all the instances where there is no metaphor, as NAN cannot be procesed later
 eng_df_all['Output'] = eng_df_all['Output'].replace("", " ")
 # pad the ouptuts and ensure there is always a triple
@@ -128,7 +127,7 @@ def ensure_triple(data):
     for item in data:
         #item = item.replace(",", "|")
         item_list = [x.strip() for x in item.split(",")]
-        # If the item is a tuple or list, convert it to a list and check its length
+        # If the item is a tuple or listconvert it to a list and check its len
         if len(item_list) < 3:
             item_list.append('')
             # If it has less than 3 elements, add 'nothing' to fill the missing slots
@@ -140,7 +139,6 @@ def ensure_triple(data):
     return result
 
 eng_df_all['Output'] = ensure_triple(eng_df_all['Output'])
-eng_df_all
 
 # Optimizersss
 #1. Optuna
@@ -192,19 +190,14 @@ def wandb_hp_space(trial):
 #         outputs = model(**inputs)
 #         logits = outputs.get('logits')
 #         labels = inputs.get('labels')
-
-#         # Convert logits to predicted tokens
 #         predictions = torch.argmax(logits, dim=-1)
-
-#         # Compute standard cross-entropy loss (you can keep this for token-level guidance)
 #         loss_fct = torch.nn.CrossEntropyLoss()
 #         loss = loss_fct(logits.view(-1, self.model.config.vocab_size), labels.view(-1))
 
-#         # Convert predictions and labels to text (for custom metrics)
 #         pred_texts = [tokenizer.decode(pred, skip_special_tokens=True).strip() for pred in predictions]
 #         label_texts = [tokenizer.decode(label, skip_special_tokens=True).strip() for label in labels]
 
-#         # 1. Cosine Similarity Metric
+#         # cos metric
 #         cos_loss = 0.0
 #         for pred_text, label_text in zip(pred_texts, label_texts):
 #             if pred_text and label_text: # check that pred and label are non-empty
@@ -214,26 +207,26 @@ def wandb_hp_space(trial):
 #                 cos_sim = cosine_similarity(pred_vec.detach().numpy(), label_vec.detach().numpy())
 #                 cos_loss += 1 - cos_sim.mean()  # Convert similarity to distance
 #               else:
-#                 # Handle cases where vectors are empty, possibly by assigning a default loss
 #                 cos_loss += 1 # Assign highest possible loss (1) if vectors are empty
 #             else:
 #               cos_loss += 1 #Assign highest possible loss if predictions or labels are empty
 
-#         # Normalize the cosine loss by batch size
+#         # Normalize the cosine loss
 #         cos_loss /= len(pred_texts)
 
-#         # 2. Levenshtein Distance Metric
+#         # Lev Distance Metric
 #         lev_loss = 0.0
 #         for pred_text, label_text in zip(pred_texts, label_texts):
 #             lev_distance = Levenshtein.distance(pred_text, label_text)
 #             max_len = max(len(pred_text), len(label_text))
 #             lev_loss += lev_distance / max_len  # Normalize Levenshtein distance by the max length
 
-#         # Normalize Levenshtein loss by batch size
 #         lev_loss /= len(pred_texts)
 
 #         # Combine the original cross-entropy loss with custom metrics
 #         combined_loss = loss + cos_loss + lev_loss
+#        #combined_loss = loss + cos_loss
+#        #combined_loss = loss + lev_loss
 
 #         return (combined_loss, outputs) if return_outputs else combined_loss
 
@@ -247,19 +240,19 @@ def levenshtein_metric(predictions, references):
         ref_text = tokenizer.decode(ref, skip_special_tokens=True)
         # Compute the normalized Levenshtein distance
         distance = lev.distance(pred_text, ref_text) / max(len(pred_text), len(ref_text))
-        distances.append(1 - distance)  # Invert it to represent similarity
+        distances.append(1 - distance)
     return np.mean(distances)
 
 def token_level_metrics(predictions, references):
     precision_list, recall_list, f1_list = [], [], []
     for pred, ref in zip(predictions, references):
-        pred_ids = pred.flatten()  # Flatten the tensor if needed
+        pred_ids = pred.flatten()
         ref_ids = ref.flatten()
 
-        # Ignore padding tokens (or other special tokens if defined)
+        # Ignore padding
         mask = ref_ids != tokenizer.pad_token_id
 
-        # Compute precision, recall, f1
+        # Precision, recall, f1
         precision = precision_score(ref_ids[mask], pred_ids[mask], average='micro')
         recall = recall_score(ref_ids[mask], pred_ids[mask], average='micro')
         f1 = f1_score(ref_ids[mask], pred_ids[mask], average='micro')
@@ -278,7 +271,7 @@ nltk.download('punkt')
 #         pred_tokens = tokenizer.decode(pred, skip_special_tokens=True).split()
 #         ref_tokens = tokenizer.decode(ref, skip_special_tokens=True).split()
 
-#         # Calculate the BLEU score for each pair of sentences
+#         # Calculate BLEU for each pair of sentences
 #         bleu_scores.append(sentence_bleu([ref_tokens], pred_tokens))
 
 #     return np.mean(bleu_scores)
@@ -289,16 +282,13 @@ def bleu_score_metric(predictions, references):
         pred_tokens = tokenizer.decode(pred, skip_special_tokens=True).split()
         ref_tokens = tokenizer.decode(ref, skip_special_tokens=True).split()
 
-        # Calculate the BLEU score for each pair of sentences with smoothing
+        # BLEU with smoothing
         bleu_scores.append(sentence_bleu([ref_tokens], pred_tokens, smoothing_function=smoothing_function))
 
     return np.mean(bleu_scores)
 
 def calculate_rouge(reference, hypothesis):
-    # Initialize ROUGE scorer
     scorer = rouge_scorer.RougeScorer(['rouge1', 'rouge2', 'rougeL'], use_stemmer=True)
-
-    # Compute ROUGE scores
     scores = scorer.score(reference, hypothesis)
     return scores
 
@@ -309,7 +299,6 @@ def compute_metrics(eval_pred):
     precision, recall, f1 = token_level_metrics(predictions, labels)
     # bleu_score = bleu_score_metric(predictions, labels)
     #for Rouge
-    # Convert predictions and labels to text
     # pred_texts = [tokenizer.decode(pred, skip_special_tokens=True).strip() for pred in predictions]
     # label_texts = [tokenizer.decode(label, skip_special_tokens=True).strip() for label in labels]
     # rouge_scores = [calculate_rouge(ref, pred) for ref, pred in zip(label_texts, pred_texts)]
@@ -327,7 +316,7 @@ def compute_metrics(eval_pred):
         # 'rougeL': rougeL
     }
 
-# # Hypertune with IA3
+# # Hypertune with IA3, Do only once it take forever to run, access for Probing attention implemented
 # class IA3Layer(nn.Module):
 #     def __init__(self, hidden_dim):
 #         super(IA3Layer, self).__init__()
@@ -337,46 +326,34 @@ def compute_metrics(eval_pred):
 #         self.ia3_value = nn.Parameter(torch.ones(hidden_dim))
 
 #     def forward(self, query, key, value):
-#         # Apply input-aware scaling to keys, queries, and values
-
-#         print(f"Query shape before IA3: {query.shape}", flush=True)
-#         print(f"Key shape before IA3: {key.shape}",  flush=True)
-#         print(f"Value shape before IA3: {value.shape}",  flush=True)
 
 #         query = query * self.ia3_query
 #         key = key * self.ia3_key
 #         value = value * self.ia3_value
 
-#         print(f"Query shape after IA3: {query.shape}",  flush=True)
-#         print(f"Key shape after IA3: {key.shape}",  flush=True)
-#         print(f"Value shape after IA3: {value.shape}",  flush=True)
 #         return query, key, value
 
 # class GPT2AttentionWithIA3(GPT2Attention):
 #     def __init__(self, config):
 #         super().__init__(config)
-#         # Initialize IA3 scaling layers
 #         self.ia3 = IA3Layer(config.hidden_size)
 
 #     def forward(self, hidden_states, layer_past=None, attention_mask=None, head_mask=None, use_cache=False, output_attentions=False):
-#         # Perform the standard GPT-2 attention mechanism
 #         print("1",  flush=True)
 #         query, key, value = self._attn(hidden_states, attention_mask, head_mask, use_cache, output_attentions)
 #         print("2",  flush=True)
-#         # Apply IA3 scaling
+#         # IA3 scaling
 #         query, key, value = self.ia3(query, key, value)
 #         print("3",  flush=True)
-#         # Proceed with the rest of the attention mechanism (unchanged)
 #         return super().forward(hidden_states, layer_past, attention_mask, head_mask, use_cache, output_attentions)
 
 # class GPT2WithIA3(GPT2LMHeadModel):
 #     def __init__(self, config):
 #         super().__init__(config)
-#         # Replace the attention layers with IA3-enhanced layers
+#         # Replace the attention layers with IA3 layers
 #         for layer in self.transformer.h:
 #             layer.attn = GPT2AttentionWithIA3(config)
 
-# # Load the pre-trained GPT-2 model and replace the attention layers
 # config = GPT2Config.from_pretrained("gpt2")
 # model = GPT2WithIA3(config)
 
@@ -386,16 +363,14 @@ model = GPT2LMHeadModel.from_pretrained(model_name)
 #config = GPT2Config.from_pretrained("gpt2")
 #model = GPT2WithIA3(config)
 
-# Add the padding token to GPT-2's tokenizer (optional, but useful)
 tokenizer.pad_token = tokenizer.eos_token
 model.config.pad_token_id = tokenizer.pad_token_id
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-# Hook to capture layer activations
 def get_layer_weights_hook(module, input, output):
-    # Save the output (weights after decoding) from the layer
+    # Save the output
     module.layer_outputs = output.detach().cpu().numpy()
 
-# Attach the hook to a specific layer you want to probe (e.g., the decoder layer)
+# Attach the hook to a specific layer to probe
 model.lm_head.register_forward_hook(get_layer_weights_hook)
 class TextDataset(Dataset):
     def __init__(self, df, tokenizer, max_length=32, max_length_out = 32):
@@ -423,7 +398,7 @@ class TextDataset(Dataset):
         model.resize_token_embeddings(len(tokenizer))
         # Return input_ids and attention_mask for training, no labels
 
-        # Input IDs and attention mask
+        # Input ids and attention mask
         input_ids = tokenized_input['input_ids'].squeeze()  # shape: (max_length)
         attention_mask = tokenized_input['attention_mask'].squeeze()  # shape: (max_length)
         output_ids = tokenized_output['input_ids'].squeeze()  # shape: (max_length)
@@ -454,7 +429,7 @@ class MaskedTextDataset(Dataset):
         tokenized_output = self.tokenizer(output_text, truncation=True, return_tensors='pt', padding='max_length', max_length=self.max_length)
         tokenized_input = self.tokenizer(input_text, truncation=True, return_tensors='pt', padding='max_length', max_length=self.max_length)
         #print(tokenized_input['input_ids'].shape, tokenized_output['input_ids'].shape)
-        # Input IDs and attention mask
+        # Input ids and attention mask
         input_ids = tokenized_input['input_ids'].squeeze()  # shape: (max_length)
         attention_mask = tokenized_input['attention_mask'].squeeze()  # shape: (max_length)
         output_ids = tokenized_output['input_ids'].squeeze()  # shape: (max_length)
@@ -508,7 +483,7 @@ class TextDatasetWithPrompts(Dataset):
 
 # Load data into the custom dataset
 My_dataset = MaskedTextDataset(df=eng_df_all, tokenizer=tokenizer)
-# Split into training and test sets
+# Split
 split = 0.8
 train_eval_size = int(split * len(My_dataset))
 test_size = len(My_dataset) - train_eval_size
@@ -518,7 +493,6 @@ train_size = int(split * len(train_eval_data))
 eval_size = len(train_eval_data) - train_size
 training_data, eval_data = random_split(train_eval_data, [train_size, eval_size])
 
-# Define DataLoaders
 batch_size = 64
 epochs = 50
 # dataloader_train = DataLoader(training_data, batch_size=batch_size, shuffle=True)
@@ -548,7 +522,6 @@ training_args = TrainingArguments(
 
 # Model Init for hyperparam optimization
 
-
 # model_args = {
 #     "model": model_name,
 #     "from_tf": False,
@@ -573,19 +546,16 @@ training_args = TrainingArguments(
 
 #IA3 init config
 peft_config = IA3Config(
-    task_type=TaskType.CAUSAL_LM,  # Task type (change if necessary)
-    target_modules=["attn.c_attn","attn.c_proj", "mlp.c_proj","mlp.c_fc"],  # Attention block layers to apply IA3
-    feedforward_modules=["mlp.c_fc"],  # Apply to feedforward layers
-    modules_to_save=["lm_head"],  # List of trainable modules to save
+    task_type=TaskType.CAUSAL_LM,
+    target_modules=["attn.c_attn","attn.c_proj", "mlp.c_proj","mlp.c_fc"],
+    feedforward_modules=["mlp.c_fc"],
+    modules_to_save=["lm_head"],
 )
 print(model)
-# Wrap the model using the PEFT IA3 method
 model = get_peft_model(model, peft_config)
-
-# Optional: Print trainable parameters
+# print params
 model.print_trainable_parameters()
 
-#Initialize the Trainer
 trainer = Trainer(
     model=model,
     args=training_args,
@@ -644,18 +614,16 @@ predicted_token_ids = np.argmax(predictions, axis=-1)
 
 # Step 2: Decode the predicted token IDs to text
 decoded_predictions = [tokenizer.decode(pred_seq, skip_special_tokens=True) for pred_seq in predicted_token_ids]
-decoded_predictions
 
 decoded_labels = [tokenizer.decode(label_seq, skip_special_tokens=True) for label_seq in labels]
-decoded_labels
 
 # human comparison:
 for label,prediction in zip(decoded_labels,decoded_predictions):
   print(f'Label:{label}, Prediction:{prediction}')
 
-!python -m pip install safetensors
+#!python -m pip install safetensors
 
-# Probing
+# Probing for layers this time
 
 from sklearn.decomposition import PCA
 from safetensors.torch import load_file
@@ -669,14 +637,3 @@ weights.keys()
 
 for layer_name in weights.keys():
     print(f"Layer: {layer_name}, Shape: {weights[layer_name].shape}")
-
-import torch
-from sklearn.metrics.pairwise import cosine_similarity
-
-# Get embeddings for two specific tokens (e.g., "dog" and "cat")
-token_ids = tokenizer.convert_tokens_to_ids(["dog", "cat"])
-token_embeddings = weights["transformer.wte.weight"][token_ids].cpu().detach().numpy()
-
-# Compute cosine similarity
-similarity = cosine_similarity(token_embeddings[0].reshape(1, -1), token_embeddings[1].reshape(1, -1))
-print(f"Cosine similarity between 'dog' and 'cat': {similarity}")
