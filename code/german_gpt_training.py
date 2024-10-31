@@ -8,13 +8,13 @@ Original file is located at
 """
 
 # prep for mount
-from google.colab import drive
-drive.mount('/content/drive')
+#from google.colab import drive
+#drive.mount('/content/drive')
 
-!python -m pip install wandb -Uq
-!python -m pip install ray[tune]
-!python -m pip install sigopt
-!python -m pip install optuna
+#!python -m pip install wandb -Uq
+#!python -m pip install ray[tune]
+#!python -m pip install sigopt
+#!python -m pip install optuna
 
 import torch
 from transformers import GPT2Tokenizer, GPT2LMHeadModel
@@ -33,7 +33,7 @@ import math
 
 wandb.login() #enter this token: a5d8e3b6d2ef7d55f930ab72670aaa64e1a4198d
 
-!ls '/content/drive/MyDrive'
+#!ls '/content/drive/MyDrive'
 
 import pandas as pd
 import re
@@ -53,10 +53,8 @@ df_met = pd.read_csv('/content/drive/MyDrive/annotation_met_new_version.csv', de
 
 df_literal.columns = ['Input', 'Output']
 df_met.columns = ['Input', 'Output']
-df_literal
 
 # clean output
-
 
 df_literal['Input'] = df_literal['Input'].str.strip()
 df_literal['Output'] = df_literal['Output'].str.strip()
@@ -86,7 +84,7 @@ def ensure_triple(data):
     for item in data:
         item = item.replace(",", "|")
         item_list = [x.strip() for x in item.split("|")]
-        # If the item is a tuple or list, convert it to a list and check its length
+        # If the item is a tuple or listconvert it to a list and check its le
         if len(item_list) < 3:
             item_list.append('#')
             # If it has less than 3 elements, add 'nothing' to fill the missing slots
@@ -97,7 +95,6 @@ def ensure_triple(data):
     return result
 
 ger_df_all['Output'] = ensure_triple(ger_df_all['Output'])
-ger_df_all
 
 # Optimizersss
 #1. Optuna
@@ -123,7 +120,6 @@ def sigopt_hp_space(trial):
     ]
 
 #3. raytune
-
 def ray_hp_space(trial):
     return {
         "learning_rate": tune.loguniform(1e-6, 1e-4),
@@ -211,12 +207,12 @@ class MaskedTextDataset(Dataset):
             'input_ids': input_ids,
             'attention_mask': attention_mask,
             'labels': output_ids,
-            'output_mask': output_mask  # Add the output mask
+            'output_mask': output_mask  # add the output mask
         }
 
 # Load data into the custom dataset
 My_dataset = MaskedTextDataset(df=ger_df_all, tokenizer=tokenizer)
-# Split into training and test sets
+# Split
 split = 0.8
 train_eval_size = int(split * len(My_dataset))
 test_size = len(My_dataset) - train_eval_size
@@ -226,7 +222,6 @@ train_size = int(split * len(train_eval_data))
 eval_size = len(train_eval_data) - train_size
 training_data, eval_data = random_split(train_eval_data, [train_size, eval_size])
 
-# Define DataLoaders
 batch_size = 16
 epochs = 500
 # dataloader_train = DataLoader(training_data, batch_size=batch_size, shuffle=True)
@@ -255,15 +250,13 @@ training_args = TrainingArguments(
 )
 
 # Model Init for hyperparam optimization
-
-
 model_args = {
     "model": model_name,
     "from_tf": False,
     "config": AutoConfig.from_pretrained(model_name),
-    "cache_dir": None, # You can specify a cache directory if needed
-    "revision": None, # You can specify a model revision if needed
-    "token": True # Set to True if using an authentication token
+    "cache_dir": None,
+    "revision": None,
+    "token": True
 }
 
 def model_init(trial):
@@ -316,10 +309,8 @@ predicted_token_ids = np.argmax(predictions, axis=-1)
 
 # Step 2: Decode the predicted token IDs to text
 decoded_predictions = [tokenizer.decode(pred_seq, skip_special_tokens=True) for pred_seq in predicted_token_ids]
-decoded_predictions
 
 decoded_labels = [tokenizer.decode(label_seq, skip_special_tokens=True) for label_seq in labels]
-decoded_labels
 
 # human comparison:
 for label,prediction in zip(decoded_labels,decoded_predictions):
